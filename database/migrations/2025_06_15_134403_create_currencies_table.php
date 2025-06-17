@@ -13,15 +13,10 @@ return new class extends Migration
      */
     public function up()
     {
-        Schema::create('events', function (Blueprint $table) {
+        Schema::create('currencies', function (Blueprint $table) {
             $table->id();
             $table->string('title');
-            $table->string('description');
-            $table->string('location');
-            $table->dateTime('start_date');
-            $table->dateTime('end_date');
-            $table->enum('status', ['draft', 'published' ,'cancelled'])->default('draft');
-            $table->foreignId('user_id')->constrained('users');
+            $table->string('code');
             $table->timestamps();
         });
     }
@@ -33,6 +28,6 @@ return new class extends Migration
      */
     public function down()
     {
-        Schema::dropIfExists('events');
+        Schema::dropIfExists('currencies');
     }
 };
