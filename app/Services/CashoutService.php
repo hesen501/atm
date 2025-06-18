@@ -8,6 +8,7 @@ use App\Models\RequestLog;
 use App\Models\Transaction;
 use App\Models\TransactionBankNote;
 use App\Models\User;
+use App\Repositories\CashoutRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use function Pest\Laravel\json;
@@ -15,10 +16,12 @@ use function Pest\Laravel\json;
 class CashoutService
 {
     protected Logger $logger;
+    private CashoutRepository $cashoutRepository;
 
-    public function __construct()
+    public function __construct(CashoutRepository $cashoutRepository)
     {
         $this->logger = Logger::getInstance();
+        $this->cashoutRepository = $cashoutRepository;
     }
     public function withdraw($request, $startTime): JsonResponse
     {
@@ -26,8 +29,8 @@ class CashoutService
         $amount = $request['amount'];
         $logger = Logger::getInstance();
 
-        $account = Account::query()->find($request['account_id']);
-        $user = User::query()->find($account->user_id);
+        $account = $this->cashoutRepository->getAccountWithUser($request['account_id']);
+        $user = $account->user;
 
         $data = [
             'user_id' => $user->id,
@@ -44,15 +47,12 @@ class CashoutService
             return response()->json(['status' => 'fail', 'message' => 'Insufficient balance']);
         }
 
-        $userTransactionSumToday = Transaction::query()
-            ->whereBetween('created_at', [$startTime, $startTime + 86400])
-            ->sum('amount');
+        $userTransactionSumToday = $this->cashoutRepository->getUserTransactionSumToday($user->id);
 
         if ($userTransactionSumToday > Transaction::DAILY_LIMIT_PER_USER) {
             $logger->log($data, $startTime);
             return response()->json(['status' => 'fail', 'message' => 'Daily limit exceeded']);
         }
-
 
 
         $bankNoteCounts = $this->computeBankNoteCombination($request['currency_id'], $amount);
