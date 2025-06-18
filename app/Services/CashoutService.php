@@ -57,29 +57,12 @@ class CashoutService
 
         $bankNoteCounts = $this->computeBankNoteCombination($request['currency_id'], $amount);
 
-        DB::transaction(function () use ($account, $request, $amount, $bankNoteCounts) {
-            foreach ($bankNoteCounts as $bankNoteId => $count) {
-                BankNote::where('id', $bankNoteId)->decrement('count', $count);
-            }
-            // Create transaction
-            $transaction = Transaction::create([
-                'user_id' => $account->user_id,
-                'currency_id' => $request['currency_id'],
-                'amount' => $amount,
-                'status' => 'completed',
-            ]);
-
-            foreach ($bankNoteCounts as $bankNoteId => $count) {
-                TransactionBankNote::create([
-                    'transaction_id' => $transaction->id,
-                    'bank_note_id' => $bankNoteId,
-                    'count' => $count,
-                ]);
-            }
-
-            $account->amount -= $amount;
-            $account->save();
-        });
+        $this->cashoutRepository->createTransactionAndDecreaseBalance(
+            $user->id,
+            $request['currency_id'],
+            $amount,
+            $bankNoteCounts
+        );
 
         $logger->log($data, $startTime);
 
