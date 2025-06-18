@@ -9,6 +9,7 @@ use App\Models\Transaction;
 use App\Models\TransactionBankNote;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use function Pest\Laravel\json;
 
 class CashoutService
@@ -52,26 +53,33 @@ class CashoutService
             return response()->json(['status' => 'fail', 'message' => 'Daily limit exceeded']);
         }
 
-        $account->amount -= $amount;
-        $account->save();
+
 
         $bankNoteCounts = $this->computeBankNoteCombination($request['currency_id'], $amount);
 
-        // Create transaction
-        $transaction = Transaction::create([
-            'user_id' => $account->user_id,
-            'currency_id' => $request['currency_id'],
-            'amount' => $amount,
-            'status' => 'completed',
-        ]);
-
-        foreach ($bankNoteCounts as $bankNoteId => $count) {
-            TransactionBankNote::create([
-                'transaction_id' => $transaction->id,
-                'bank_note_id'   => $bankNoteId,
-                'count'          => $count,
+        DB::transaction(function () use ($account, $request, $amount, $bankNoteCounts) {
+            foreach ($bankNoteCounts as $bankNoteId => $count) {
+                BankNote::where('id', $bankNoteId)->decrement('count', $count);
+            }
+            // Create transaction
+            $transaction = Transaction::create([
+                'user_id' => $account->user_id,
+                'currency_id' => $request['currency_id'],
+                'amount' => $amount,
+                'status' => 'completed',
             ]);
-        }
+
+            foreach ($bankNoteCounts as $bankNoteId => $count) {
+                TransactionBankNote::create([
+                    'transaction_id' => $transaction->id,
+                    'bank_note_id' => $bankNoteId,
+                    'count' => $count,
+                ]);
+            }
+
+            $account->amount -= $amount;
+            $account->save();
+        });
 
         $logger->log($data, $startTime);
 
